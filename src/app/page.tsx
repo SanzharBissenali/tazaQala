@@ -1,103 +1,220 @@
-import Image from "next/image";
+'use client'
+import { useEffect, useRef, useState } from 'react'
+import { load } from '@2gis/mapgl'
+import styles from './page.module.css'
+import axios from 'axios'
+
+interface Report {
+  _id: string
+  name: string
+  email: string
+  text: string
+  coords: [number, number]
+  createdAt: string
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<any>(null)
+  const reportMarkersRef = useRef<any[]>([])
+  
+  const [coords, setCoords] = useState<[number, number] | null>(null)
+  const [message, setMessage] = useState('');
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const[name, setName] = useState('');
+  const[email, setEmail] = useState('');
+  const[text, setText] = useState('');
+
+  const [nameError, setNameError] = useState('');
+  const [textError, setTextError] = useState('');
+  const [coordsError, setCoordsError] = useState('');
+
+  const [reports, setReports] = useState<Report[]>([]);
+
+  const fetchReports = async () => {
+    try {
+      const response = await axios.get('/api/data');
+      setReports(response.data);
+    } catch (err) {
+      console.error('Failed to fetch reports:', err);
+    }
+  };
+
+  const addReportMarkers = async () => {
+    if (!mapRef.current) return;
+
+    // Clear existing report markers
+    reportMarkersRef.current.forEach(marker => marker.destroy());
+    reportMarkersRef.current = [];
+
+    const mapglAPI = await load();
+
+    reports.forEach(report => {
+      const reportMarker = new mapglAPI.Marker(mapRef.current, {
+        coordinates: report.coords
+      });
+
+      // Create popup content
+      const popupContent = `
+        <div style="padding: 10px; max-width: 250px; background: white; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+          <h4 style="margin: 0 0 8px 0; color: #333;">${report.name}</h4>
+          <p style="margin: 0 0 8px 0; font-size: 12px; color: #666;">${report.email}</p>
+          <p style="margin: 0; color: #444;">${report.text}</p>
+          <small style="color: #999; font-size: 11px;">
+            ${new Date(report.createdAt).toLocaleDateString()}
+          </small>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+      `;
+
+      // Add popup to marker
+      let popup: any = null;
+      
+      // Show popup on marker click
+      reportMarker.on('click', () => {
+        // Remove existing popup if any
+        if (popup) {
+          popup.destroy();
+          popup = null;
+        } else {
+          // Create and show new popup
+          popup = new mapglAPI.HtmlMarker(mapRef.current, {
+            coordinates: report.coords,
+            html: popupContent,
+            anchor: [0, -10]
+          });
+        }
+      });
+
+      reportMarkersRef.current.push(reportMarker);
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    let valid = true;
+    setNameError('');
+    setTextError('');
+    setCoordsError('');
+
+    if (!name.trim()) {
+      setNameError('Name is required.');
+      valid = false;
+    }
+
+    if (!text.trim()) {
+      setTextError('Text is required.');
+      valid = false;
+    }
+
+    if (!coords) {
+      setCoordsError('Please select a location on the map.');
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    try {
+      await axios.post('/api/data', { name, email, text, coords });
+      setMessage('Form submitted successfully!');
+      setName('');
+      setEmail('');
+      setText('');
+      setCoords(null);
+      // Refresh reports after successful submission
+      fetchReports();
+    } catch (err) {
+      console.log(err);
+      setMessage('Submission failed.');
+    }
+  };
+
+  // Initialize map once
+  useEffect(() => {
+    let marker: any;
+
+    const initMap = async () => {
+      const mapglAPI = await load();
+
+      if (mapContainerRef.current) {
+        mapRef.current = new mapglAPI.Map(mapContainerRef.current, {
+          center: [71.449074, 51.169392],
+          zoom: 13,
+          key: '031463b1-9009-4d29-960e-d8b084fbfb2f',
+        });
+
+        // Click handler for placing new marker
+        mapRef.current.on('click', (e: any) => {
+          const clickedCoords: [number, number] = [e.lngLat[0], e.lngLat[1]];
+          setCoords(clickedCoords);
+
+          if (marker) {
+            marker.setCoordinates(clickedCoords);
+          } else {
+            marker = new mapglAPI.Marker(mapRef.current, { 
+              coordinates: clickedCoords
+            });
+          }
+        });
+      }
+    };
+
+    initMap();
+
+    return () => {
+      if (mapRef.current) mapRef.current.destroy();
+    };
+  }, []); // Only run once
+
+  // Fetch reports on component mount
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  // Add markers when reports change
+  useEffect(() => {
+    if (reports.length > 0) {
+      addReportMarkers();
+    }
+  }, [reports]);
+
+  return (
+    <div className={styles.container}>
+      <div ref={mapContainerRef} className={styles.map} />
+      {message && <p className={styles.message}>{message}</p>}
+      <form onSubmit={handleSubmit } className={styles.form}>
+        <div className={styles.formGroup}>
+          <label>Name</label>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)}/>
+          {nameError && <p className={styles.error}>{nameError}</p>}
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Email</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}/>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Text</label>
+          <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)}/>
+          {textError && <p className={styles.error}>{textError}</p>} 
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Location</label>
+          <input
+            type="text"
+            value={coords ? `${coords[0]}, ${coords[1]}` : ''}
+            readOnly
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          {coordsError && <p className={styles.error}>{coordsError}</p>}
+          <small>Click on the map to select location.</small>
+        </div>
+
+        <button type="submit" className={styles.submitButton}>
+          Submit
+        </button>
+      </form>
     </div>
-  );
+  )
 }
