@@ -24,9 +24,26 @@ async function getClient() {
 // POST /api/data → store a new report
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, text, coords } = await req.json()
+    const { name, email, text, coords, photo } = await req.json()
     
-    const client = await getClient()
+    console.log('=== API RECEIVED DATA ===')
+    console.log('Name:', name)
+    console.log('Email:', email) 
+    console.log('Text:', text)
+    console.log('Coords:', JSON.stringify(coords))
+    console.log('Photo URL:', photo)
+    
+    const client = await MongoClient.connect(process.env.MONGODB_URI as string, {
+      tls: true,
+      tlsInsecure: false,
+      serverSelectionTimeoutMS: 30000,
+      connectTimeoutMS: 30000,
+      socketTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 5,
+      retryWrites: true,
+      retryReads: true
+    })
     const db = client.db('map-reports')
     
     const newReport = {
@@ -35,13 +52,22 @@ export async function POST(req: NextRequest) {
       text,
       coords,
       createdAt: new Date(),
+      status: 'pending',
+      photo: photo || null
     }
 
-    await db.collection('submissions').insertOne(newReport)
+    console.log('=== SAVING TO MONGODB ===')
+    console.log('Document to save:', JSON.stringify(newReport))
+
+    const result = await db.collection('submissions').insertOne(newReport)
+    console.log('=== MONGODB SAVE SUCCESS ===')
+    console.log('Inserted ID:', result.insertedId)
+    
+    client.close()
 
     return NextResponse.json({ message: 'Success' }, { status: 200 })
   } catch (err) {
-    console.error('POST error:', err)
+    console.error('=== POST ERROR ===', err)
     return NextResponse.json({ message: 'Error' }, { status: 500 })
   }
 }

@@ -26,6 +26,7 @@ interface Report {
 export default function LandingPage() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<any>(null)
+  const mapInitializedRef = useRef(false)
   const [reports, setReports] = useState<Report[]>([])
   const { darkMode } = useTheme()
 
@@ -41,12 +42,14 @@ export default function LandingPage() {
 
   // Initialize preview map
   useEffect(() => {
+    if (mapInitializedRef.current) return
+
     const initPreviewMap = async () => {
       const mapglAPI = await load()
 
-      if (mapContainerRef.current) {
+      if (mapContainerRef.current && !mapRef.current) {
         mapRef.current = new mapglAPI.Map(mapContainerRef.current, {
-          center: [71.449074, 51.169392],
+          center: [71.4306682, 51.1282205],
           zoom: 12,
           key: '031463b1-9009-4d29-960e-d8b084fbfb2f',
         })
@@ -54,6 +57,8 @@ export default function LandingPage() {
         // Disable interactions for preview
         // mapRef.current.setZoomControl(false)
         // mapRef.current.setRotateControl(false)
+
+        mapInitializedRef.current = true
       }
     }
 
@@ -61,14 +66,18 @@ export default function LandingPage() {
     fetchReports()
 
     return () => {
-      if (mapRef.current) mapRef.current.destroy()
+      if (mapRef.current) {
+        mapRef.current.destroy()
+        mapRef.current = null
+        mapInitializedRef.current = false
+      }
     }
   }, [])
 
   // Add markers when reports load
   useEffect(() => {
     const addPreviewMarkers = async () => {
-      if (!mapRef.current || reports.length === 0) return
+      if (!mapRef.current || !mapInitializedRef.current || reports.length === 0) return
 
       const mapglAPI = await load()
 
